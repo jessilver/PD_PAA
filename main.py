@@ -16,7 +16,11 @@ from heuristics import solve_heuristic
 # ==========================================
 # 1. CONFIGURAÇÕES
 # ==========================================
-CHECKPOINT_FILE = "adp_checkpoint.json"
+CHECKPOINT_FILE = "adp_checkpoint.json"  # suporte legado
+CHECKPOINT_DIR = "checkpoints"
+MAX_CHECKPOINT_FILES = 20
+STATE_FILE = os.path.join(CHECKPOINT_DIR, "training_state.npz")
+CHECKPOINT_INTERVAL = 500
 HORIZON = 96            # 24h
 TAU = 15                # 15 min
 ALPHA = 0.01            # Taxa de aprendizado (Lento e estável)
@@ -29,30 +33,155 @@ PRICES = [0.50 if (17 <= (t*15)/60 < 20) else 0.15 for t in range(HORIZON)]
 # ==========================================
 # 2. FUNÇÕES DE PERSISTÊNCIA (SALVAR/CARREGAR)
 # ==========================================
-def save_checkpoint(zetas, iteration, history):
-    """Salva o cérebro da IA em um arquivo JSON."""
-    data = {
-        "zetas": zetas.tolist(),          # Converte numpy para lista
+def _warn_and_move_corrupted(path):
+    corrupted_path = path + ".corrupted"
+    os.replace(path, corrupted_path)
+    print(f"Aviso: arquivo de checkpoint corrompido movido para {corrupted_path}")
+    return corrupted_path
+
+
+def _load_training_state():
+    if not os.path.exists(STATE_FILE):
+        return None
+
+    try:
+        with np.load(STATE_FILE) as data:
+            iteration = int(data["iteration"])
+            zetas = np.array(data["zetas"])
+            history = [np.array(row) for row in np.atleast_2d(data["history"])]
+    except Exception:
+        _warn_and_move_corrupted(STATE_FILE)
+        return None
+
+    return {
+        "zetas": zetas,
         "iteration": iteration,
-        "history": [z.tolist() for z in history] # Histórico completo
+        "history": history
     }
-    with open(CHECKPOINT_FILE, 'w') as f:
+
+
+def _load_legacy_checkpoint():
+    if not os.path.exists(CHECKPOINT_FILE) or os.path.isdir(CHECKPOINT_FILE):
+        return None
+
+    try:
+        with open(CHECKPOINT_FILE, 'r') as f:
+            data = json.load(f)
+    except json.JSONDecodeError:
+        _warn_and_move_corrupted(CHECKPOINT_FILE)
+        return None
+
+    history = data.get("history", []) or [data.get("zetas", [])]
+    history = [np.array(z) for z in history]
+
+    result = {
+        "zetas": np.array(data["zetas"]),
+        "iteration": data["iteration"],
+        "history": history
+    }
+
+    # Migra o formato legado para o novo esquema de checkpoints.
+    save_checkpoint(result["zetas"], result["iteration"])
+    save_training_state(result["zetas"], result["iteration"], result["history"])
+    os.remove(CHECKPOINT_FILE)
+
+    return result
+
+
+def _list_checkpoint_files():
+    if not os.path.isdir(CHECKPOINT_DIR):
+        return []
+    files = [
+        os.path.join(CHECKPOINT_DIR, name)
+        for name in os.listdir(CHECKPOINT_DIR)
+        if name.endswith('.json')
+    ]
+    files.sort()
+    return files
+
+
+def save_training_state(zetas, iteration, history):
+    if not history:
+        return
+
+    os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+    hist_arr = np.stack(history)
+    tmp_path = os.path.join(CHECKPOINT_DIR, "training_state.tmp.npz")
+    np.savez_compressed(
+        tmp_path,
+        iteration=np.array(iteration, dtype=np.int64),
+        zetas=np.array(zetas),
+        history=hist_arr
+    )
+    os.replace(tmp_path, STATE_FILE)
+
+
+def save_checkpoint(zetas, iteration):
+    """Salva o cérebro da IA em checkpoints atômicos e rotativos."""
+    os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+
+    if os.path.exists(CHECKPOINT_FILE) and not os.path.isdir(CHECKPOINT_FILE):
+        os.remove(CHECKPOINT_FILE)
+
+    filename = f"checkpoint_{iteration:08d}.json"
+    tmp_path = os.path.join(CHECKPOINT_DIR, filename + '.tmp')
+    final_path = os.path.join(CHECKPOINT_DIR, filename)
+
+    data = {
+        "iteration": iteration,
+        "zetas": zetas.tolist()
+    }
+
+    with open(tmp_path, 'w') as f:
         json.dump(data, f)
-    # Feedback visual discreto
-    # print(f" [Checkpoint salvo na iteração {iteration}]", end='\r')
+
+    os.replace(tmp_path, final_path)
+
+    # Limita a quantidade de arquivos para evitar uso excessivo de disco.
+    files = _list_checkpoint_files()
+    while len(files) > MAX_CHECKPOINT_FILES:
+        os.remove(files.pop(0))
+
 
 def load_checkpoint():
     """Carrega o cérebro da IA do disco."""
-    if not os.path.exists(CHECKPOINT_FILE):
+    state = _load_training_state()
+    if state:
+        return state
+
+    legacy = _load_legacy_checkpoint()
+    if legacy:
+        return legacy
+
+    files = _list_checkpoint_files()
+    if not files:
         return None
-    
-    with open(CHECKPOINT_FILE, 'r') as f:
-        data = json.load(f)
-    
+
+    history = []
+    latest = None
+    for path in files:
+        try:
+            with open(path, 'r') as f:
+                data = json.load(f)
+        except json.JSONDecodeError:
+            _warn_and_move_corrupted(path)
+            continue
+
+        zetas = np.array(data["zetas"])
+        history.append(zetas)
+
+        if latest is None or data["iteration"] > latest["iteration"]:
+            latest = {"iteration": data["iteration"], "zetas": zetas}
+
+    if latest is None:
+        return None
+
+    save_training_state(latest["zetas"], latest["iteration"], history)
+
     return {
-        "zetas": np.array(data["zetas"]),
-        "iteration": data["iteration"],
-        "history": [np.array(z) for z in data["history"]]
+        "zetas": latest["zetas"],
+        "iteration": latest["iteration"],
+        "history": history
     }
 
 # ==========================================
@@ -253,8 +382,9 @@ def main():
             current_zetas = (1 - ALPHA) * current_zetas + ALPHA * reg.coef_
             
             # 4. Log e Salvamento
-            if iteration_count % 1 == 0: # Salva a cada iteração (seguro)
-                save_checkpoint(current_zetas, iteration_count, zeta_history)
+            if iteration_count % CHECKPOINT_INTERVAL == 0:
+                save_checkpoint(current_zetas, iteration_count)
+                save_training_state(current_zetas, iteration_count, zeta_history)
                 
             print(f"Iter {iteration_count}: Custo={res['cost']:.2f} | Zeta_Carga={current_zetas[3]:.2f}")
 

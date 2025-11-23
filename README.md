@@ -68,6 +68,22 @@ O gráfico mostra a evolução dos pesos ($\zeta$) que compõem a "intuição" d
 
 -----
 
+## 📊 Resultados após 50.198 Iterações (≈12 horas)
+
+Executamos um treinamento contínuo por **50.198 iterações** (aprox. 12 horas de simulação). O sistema manteve estabilidade numérica e continuou a refinar o deslocamento de carga, gerando os panoramas abaixo.
+
+![Perfil de carga diário comparando ADP e EDLD (50k iterações)](fig9_perfil_carga_50k.png)
+
+![Curvas de convergência dos pesos ao longo de 50k iterações](fig3_convergencia_50k.png)
+
+**Conclusões principais:**
+
+- A política ADP continua concentrando a maior parte da energia no período pós-20h, minimizando custos em relação ao EDLD mesmo com cenários extremos simulados.
+- O nível de serviço permaneceu próximo de 100%, indicando que a política explorada mantém a confiabilidade após longas sessões de treinamento.
+- Os pesos ($\zeta$) estabilizam em torno de uma faixa estreita após cerca de 30k iterações, oscilando pontualmente apenas quando surgem dias com penalidades altas — comportamento esperado para um ADP com regressão incremental.
+
+-----
+
 ## 🚀 Como Rodar o Projeto
 
 ### Pré-requisitos
