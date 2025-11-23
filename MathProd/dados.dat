@@ -1,0 +1,62 @@
+# ==============================================================================
+# 1. DEFINIÇÃO DOS CONJUNTOS (Quem está no pátio?)
+# ==============================================================================
+
+# Lista de Carregadores (IDs)
+set CHARGERS := 1 2;
+
+# Lista de Veículos presentes (IDs)
+set EVS := 101 102 103;
+
+# Definição dos Conectores para cada Carregador
+# Carregador 1 tem 2 conectores (0 e 1)
+# Carregador 2 (Rápido) tem 1 conector (0)
+set CONNECTORS[1] := 0 1;
+set CONNECTORS[2] := 0;
+
+# ==============================================================================
+# 2. PARÂMETROS DO SISTEMA (O ambiente)
+# ==============================================================================
+
+param GridLimit := 1000;    # Limite da rede em kW
+param EnergyPrice := 0.25;  # Preço da energia caro neste horário ($0.25)
+
+# Feature de Tempo: (Tau=15 * Epoch=32) = 480 minutos passados
+param CurrentTimeFeature := 480; 
+
+# ==============================================================================
+# 3. DADOS DOS CARREGADORES
+# ==============================================================================
+
+# Potência Máxima (kW) de cada carregador
+param MaxPower := 
+  1 22.0   # Carregador Nível 2
+  2 50.0;  # Carregador Rápido (DC)
+
+# ==============================================================================
+# 4. DADOS DOS VEÍCULOS (Estado atual da bateria e urgência)
+# ==============================================================================
+
+# Tabela combinada: ID do Carro | Carga Necessária (d_jt) | Urgência (1/prazo)
+param: EnergyNeeded  UrgencyScore :=
+  101  40.0          0.05    # Carro tranquilo, precisa de muita carga mas tem tempo
+  102  10.0          1.00    # Carro URGENTE! Pouca carga, mas prazo estourando (1/1)
+  103  25.0          0.10;   # Carro médio
+
+# ==============================================================================
+# 5. OS ZETAS (CÉREBRO DO ADP)
+# ==============================================================================
+# Estes são os valores que o seu Python aprendeu após o treinamento.
+# O solver vai usá-los para ponderar se vale a pena gastar energia cara agora.
+
+param Zeta :=
+  0   28.42   # Bias
+  1   -1.43   # Peso para "Carros Agendados"
+  2    8.46   # Peso para "Conectores Disponíveis"
+  3    0.18   # Peso para "Carga Restante" (Positivo = Carga sobrando é ruim)
+  4  -72.85   # Peso para "Urgência não atendida" (Muito negativo = Perigoso ignorar)
+  5   -0.03;  # Peso do Tempo
+
+# ==============================================================================
+# FIM DO ARQUIVO DE DADOS
+# ==============================================================================
