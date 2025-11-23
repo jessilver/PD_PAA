@@ -9,8 +9,9 @@ set CONNECTORS{i in CHARGERS}; # [cite_start]Conectores de cada carregador (k) [
 
 # Parâmetros do Sistema
 param Tau := 15;            # [cite_start]Duração da época em minutos [cite: 165]
+param Horizon default 96;   # Número de épocas do dia (fixo no código Python)
 param MaxPower{i in CHARGERS}; # [cite_start]u_i: Potência máx do carregador (kW) [cite: 175]
-param GridLimit := 1000;    # [cite_start]U: Limite total da rede (kW) [cite: 194]
+param GridLimit default 1.0e9;   # Limite total da rede (kW) – desativado por padrão para alinhar com solver.py
 param EnergyPrice;          # [cite_start]e_t: Preço da energia agora [cite: 160]
 
 # Dados dos Veículos
@@ -18,7 +19,7 @@ param EnergyNeeded{j in EVS}; # [cite_start]d_jt: Carga necessária atual (kWh) 
 param UrgencyScore{j in EVS}; # 1/(delta_j - t): Pré-calculado para simplificar
 
 # Pesos do ADP (Aprendidos na Regressão) - Os famosos "Zetas"
-param Zeta{0..5};           [cite_start]# [cite: 491-495]
+param Zeta{0..5};           # Pesos do ADP (zetas)
 param CurrentTimeFeature;   # phi_5 (Tau * t)
 
 # ==============================================================================
@@ -76,7 +77,7 @@ minimize Total_Cost:
       ) +
 
       # Feature 5: Tempo (Constante nesta iteração)
-      Zeta[5] * CurrentTimeFeature
+    Zeta[5] * (CurrentTimeFeature / (Tau * Horizon))
     );
 
 # ==============================================================================

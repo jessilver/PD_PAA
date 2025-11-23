@@ -18,11 +18,12 @@ set CONNECTORS[2] := 0;
 # 2. PARÂMETROS DO SISTEMA (O ambiente)
 # ==============================================================================
 
-param GridLimit := 1000;    # Limite da rede em kW
+# GridLimit segue o padrão do Python (sem limite global). Use valor alto se necessário.
+# param GridLimit := 1.0e9;
 param EnergyPrice := 0.25;  # Preço da energia caro neste horário ($0.25)
 
 # Feature de Tempo: (Tau=15 * Epoch=32) = 480 minutos passados
-param CurrentTimeFeature := 480; 
+param CurrentTimeFeature := 480;  # minuto atual (Tau * epoch)
 
 # ==============================================================================
 # 3. DADOS DOS CARREGADORES
@@ -39,9 +40,9 @@ param MaxPower :=
 
 # Tabela combinada: ID do Carro | Carga Necessária (d_jt) | Urgência (1/prazo)
 param: EnergyNeeded  UrgencyScore :=
-  101  40.0          0.05    # Carro tranquilo, precisa de muita carga mas tem tempo
-  102  10.0          1.00    # Carro URGENTE! Pouca carga, mas prazo estourando (1/1)
-  103  25.0          0.10;   # Carro médio
+  101  40.0          0.05    # 1/(departure - epoch)
+  102  10.0          1.00
+  103  25.0          0.10;
 
 # ==============================================================================
 # 5. OS ZETAS (CÉREBRO DO ADP)
@@ -56,6 +57,10 @@ param Zeta :=
   3    0.18   # Peso para "Carga Restante" (Positivo = Carga sobrando é ruim)
   4  -72.85   # Peso para "Urgência não atendida" (Muito negativo = Perigoso ignorar)
   5   -0.03;  # Peso do Tempo
+
+end;
+
+
 
 # ==============================================================================
 # FIM DO ARQUIVO DE DADOS
