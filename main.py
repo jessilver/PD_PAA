@@ -16,7 +16,7 @@ from heuristics import solve_heuristic
 # ==========================================
 # 1. CONFIGURAÇÕES
 # ==========================================
-CHECKPOINT_FILE = "adp_checkpoint.json"  # suporte legado
+CHECKPOINT_FILE = "adp_checkpoint.json"
 CHECKPOINT_DIR = "checkpoints"
 MAX_CHECKPOINT_FILES = 20
 STATE_FILE = os.path.join(CHECKPOINT_DIR, "training_state.npz")
